@@ -1,8 +1,9 @@
 package com.app.consumer.tranaction_consumer.service;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
@@ -18,7 +19,8 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @Slf4j
 public class KafkaTransactionConsumerService {
-    
+    private final Logger logger = LoggerFactory.getLogger(KafkaTransactionConsumerService.class);
+
     @Autowired
     @Qualifier("producer")
     KafkaTemplate<String,ConsumerTransaction> producerKafkaTemplate;
@@ -28,6 +30,7 @@ public class KafkaTransactionConsumerService {
 
      @KafkaListener(topics = "transaction",groupId = "trans-group")
      public void fetchTransactionDetails(String message) throws JsonMappingException, JsonProcessingException{
+        logger.info("=======listening as consumer of transaction with group trans-group========================");
         ObjectMapper objectMapper = new ObjectMapper();
         ConsumerTransaction transaction = objectMapper.readValue(message, ConsumerTransaction.class);
         try{
@@ -37,19 +40,18 @@ public class KafkaTransactionConsumerService {
            if (isValidAmount(merchantId,amount)) {
             transaction.setStatus("Completed");
             transactionRepository.save(transaction);
-            log.info("Transaction saved: {}", transaction);
-            System.out.println("Transaction saved: " + transaction);
+            logger.info("Transaction saved: {}", transaction);
             double balanceInCard = transactionRepository.getAmountByMerchentId(merchantId);
             double amountLeftInCard = balanceInCard - transaction.getAmount();
             transactionRepository.updateAmountByMerchantId(transaction.getMerchantId(),amountLeftInCard);
-            log.info("Updated merchant balance: {}", amountLeftInCard);
+            logger.info("Updated merchant balance: {}", amountLeftInCard);
         } else {
             transaction.setStatus("Failed");
             transactionRepository.save(transaction);
-            log.warn("Transaction failed due to insufficient balance: {}", transaction);
+            logger.warn("Transaction failed due to insufficient balance: {}", transaction);
         }
     }catch(Exception e){
-        log.error("Error processing transaction: {}", transaction, e);
+        logger.error("Error processing transaction: {}", transaction, e);
        producerKafkaTemplate.send("dead-trs-que", transaction); 
        }
      }
